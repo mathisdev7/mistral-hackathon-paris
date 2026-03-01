@@ -31,10 +31,11 @@ function buildSystemPrompt(
   state: {
     sessionActive: boolean;
     canStartSession: boolean;
+    shouldEndSession: boolean;
   },
 ): string {
   const { name, targetLanguage, nativeLanguage, motivation, tutorLanguageMode } = profile;
-  const { sessionActive, canStartSession } = state;
+  const { sessionActive, canStartSession, shouldEndSession } = state;
   const lang = targetLanguage || "a new language";
   const native = nativeLanguage || "English";
   const userName = name || "the learner";
@@ -49,7 +50,7 @@ If you produce any markdown or formatting, it will be read aloud as literal char
 
 You are a spoken-language practice partner helping ${userName} improve their ${lang} ORALLY.
 Their native language is ${native}. Their motivation: "${motivation || "to get better at speaking"}".
-Current session state: sessionActive=${sessionActive ? "true" : "false"}, canStartSession=${canStartSession ? "true" : "false"}.
+Current session state: sessionActive=${sessionActive ? "true" : "false"}, canStartSession=${canStartSession ? "true" : "false"}, shouldEndSession=${shouldEndSession ? "true" : "false"}.
 
 NON-NEGOTIABLE: What you must NOT do
 - Do NOT narrate the scene, setup, or context.
@@ -117,9 +118,11 @@ Call this tool only when sessionActive=true and the user clearly wants to stop p
 ### Important tool behavior
 - If sessionActive=false and canStartSession=false: DO NOT start roleplay and DO NOT generate scenario/topic suggestions. Only give a short recap of memory (strengths, weaknesses, last session, level) and invite the user to pick one of the topic cards shown in the UI.
 - If sessionActive=false and canStartSession=true: call start_session now, then begin roleplay.
+- If sessionActive=true and shouldEndSession=true: call end_session immediately in this turn.
 - If sessionActive=true: stay fully in roleplay and do not switch to teacher/explainer mode unless the user explicitly asks for a quick explanation.
 - When a roleplay naturally reaches its conclusion (agreement reached, transaction completed, interview finished, etc.), call end_session immediately and send one short in-character closing line that says new topic cards are prepared below. Do not ask for another scenario in the same reply.
 - This thread can contain multiple sessions. After end_session, wait for explicit user acceptance before calling start_session again.
+- For end_session assessment fields, be concrete and session-specific. Avoid generic repeats like "good vocabulary" or "needs grammar". Capture distinct micro-skills actually observed in THIS session.
 - Never drift into generic tutoring instructions during roleplay. Keep turn-by-turn scenario interaction.
 - After calling a tool, continue speaking naturally. The tool results are internal — the user does not see them.`;
 }
@@ -285,13 +288,15 @@ function buildTools(userId: string, targetLanguage: string, convId: string) {
           ),
         strengths: z
           .array(z.string())
+          .min(2)
+          .max(4)
           .describe(
-            "Things the user demonstrably did well in this session — only include what actually appeared in the conversation, e.g. ['used polite request forms correctly', 'confident with numbers and quantities']",
+            "2-4 concrete things the user demonstrably did well in this session, phrased as specific micro-skills (not generic labels). Only include what actually appeared in the conversation, e.g. ['used polite request forms correctly', 'recovered smoothly after a hesitation']",
           ),
         weaknesses: z
           .array(z.string())
           .describe(
-            "Genuine areas for improvement based ONLY on actual mistakes or hesitations observed in this session's transcript. If the user made no notable errors, return an empty array. NEVER invent errors or reference forms the user did not produce.",
+            "1-3 genuine, specific areas for improvement based ONLY on actual mistakes or hesitations in this session's transcript. If there were no notable issues, return an empty array. NEVER invent errors or reference forms the user did not produce.",
           ),
       }),
       execute: async ({
@@ -313,6 +318,7 @@ function buildTools(userId: string, targetLanguage: string, convId: string) {
           levelAssessment,
           strengths,
           weaknesses,
+          replaceLists: true,
         });
 
         // Persist recap to conversation row so it survives page reloads
@@ -400,6 +406,10 @@ export async function POST(req: Request) {
     lastUserText,
   );
 
+  const shouldEndSession = /\b(stop|end|finish|that'?s all|we'?re done|done for now|pause|arr[êe]ter|stopper|terminer|on arr[êe]te|c'?est bon|ça suffit|ca suffit)\b/i.test(
+    lastUserText,
+  );
+
   // Guard against duplicate __INIT__: if this conversation already has messages AND
   // the __INIT__ is the last user message (no real messages after it), the greeting
   // was already generated — return empty stream to prevent duplication.
@@ -455,6 +465,7 @@ export async function POST(req: Request) {
       {
         sessionActive,
         canStartSession,
+        shouldEndSession,
       },
     ),
     messages: await convertToModelMessages(chatMessages),

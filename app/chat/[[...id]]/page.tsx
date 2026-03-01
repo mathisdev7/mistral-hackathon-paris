@@ -1,4 +1,5 @@
 import { Plus, Brain } from "lucide-react";
+import { desc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -8,6 +9,8 @@ import { ConversationSidebar } from "@/components/conversation-sidebar";
 import { auth } from "@/lib/auth";
 import { createConversation } from "@/lib/conversation-actions";
 import { getUserMemory } from "@/lib/memory";
+import { db } from "@/db";
+import { conversation } from "@/db/schema";
 import { getConversations, getConversationWithMessages } from "@/lib/queries";
 
 import type { UIMessage } from "ai";
@@ -35,6 +38,7 @@ export default async function ChatPage({
     nativeLanguage: string;
     motivation: string;
     tutorLanguageMode: string;
+    voiceGender?: "female" | "male";
   };
 
   const { id } = await params;
@@ -52,12 +56,37 @@ export default async function ChatPage({
 
   // Fetch memory summary for the empty state panel
   const memory = await getUserMemory(user.id);
+
+  const recapRows = await db
+    .select({ recap: conversation.sessionRecap, updatedAt: conversation.updatedAt })
+    .from(conversation)
+    .where(eq(conversation.userId, user.id))
+    .orderBy(desc(conversation.updatedAt))
+    .limit(20);
+
+  const recaps = recapRows
+    .map((r) => r.recap)
+    .filter((r): r is NonNullable<typeof r> => !!r);
+
+  const latestRecap = recaps[0] ?? null;
+  const uniqueList = (items: string[]) =>
+    Array.from(new Set(items.map((s) => s.trim()).filter(Boolean)));
+
+  const displayLevel = memory?.levelAssessment ?? latestRecap?.levelAssessment ?? null;
+  const displayStrengths = uniqueList([
+    ...(memory?.strengths ?? []),
+    ...(latestRecap?.strengths ?? []),
+  ]).slice(0, 8);
+  const displayWeaknesses = uniqueList([
+    ...(memory?.weaknesses ?? []),
+    ...(latestRecap?.weaknesses ?? []),
+  ]).slice(0, 6);
+
   const hasMemory =
-    !!memory &&
-    (!!memory.levelAssessment ||
-      memory.strengths.length > 0 ||
-      memory.weaknesses.length > 0 ||
-      memory.sessions.length > 0);
+    !!displayLevel ||
+    displayStrengths.length > 0 ||
+    displayWeaknesses.length > 0 ||
+    ((memory?.sessions.length ?? 0) > 0);
   const recentSessions = memory ? [...memory.sessions].reverse().slice(0, 3) : [];
 
   // Serialize conversations for the client
@@ -75,6 +104,7 @@ export default async function ChatPage({
     nativeLanguage: user.nativeLanguage ?? "",
     motivation: user.motivation ?? "",
     tutorLanguageMode: (user.tutorLanguageMode ?? "native") as import("@/lib/types").TutorLanguageMode,
+    voiceGender: (user.voiceGender ?? "female") as import("@/lib/types").VoiceGender,
   };
 
 
@@ -135,9 +165,9 @@ export default async function ChatPage({
                       </p>
                       <div>
                         <p className="text-muted-foreground">Strengths</p>
-                        {memory && memory.strengths.length > 0 ? (
+                        {displayStrengths.length > 0 ? (
                           <ul className="mt-1 space-y-1">
-                            {memory.strengths.slice(0, 5).map((strength, index) => (
+                            {displayStrengths.slice(0, 5).map((strength, index) => (
                               <li key={index}>• {strength}</li>
                             ))}
                           </ul>

@@ -7,10 +7,13 @@ import {
   Medal01Icon,
   BrainIcon,
 } from "@hugeicons/core-free-icons";
+import { desc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { db } from "@/db";
+import { conversation } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { getUserMemory } from "@/lib/memory";
 
@@ -20,8 +23,35 @@ export default async function MemoryPage() {
 
   const memory = await getUserMemory(session.user.id);
 
-  const hasProfile = memory && (memory.levelAssessment || memory.strengths.length > 0 || memory.weaknesses.length > 0);
-  const hasSessions = memory && memory.sessions.length > 0;
+  const recapRows = await db
+    .select({ recap: conversation.sessionRecap, updatedAt: conversation.updatedAt })
+    .from(conversation)
+    .where(eq(conversation.userId, session.user.id))
+    .orderBy(desc(conversation.updatedAt))
+    .limit(20);
+
+  const recaps = recapRows
+    .map((r) => r.recap)
+    .filter((r): r is NonNullable<typeof r> => !!r);
+
+  const latestRecap = recaps[0] ?? null;
+
+  const uniqueList = (items: string[]) =>
+    Array.from(new Set(items.map((s) => s.trim()).filter(Boolean)));
+
+  // Prefer curated Supermemory lists; fallback to latest recap when unavailable.
+  const displayLevel = memory?.levelAssessment ?? latestRecap?.levelAssessment ?? null;
+  const displayStrengths = uniqueList([
+    ...(memory?.strengths ?? []),
+    ...(latestRecap?.strengths ?? []),
+  ]).slice(0, 8);
+  const displayWeaknesses = uniqueList([
+    ...(memory?.weaknesses ?? []),
+    ...(latestRecap?.weaknesses ?? []),
+  ]).slice(0, 6);
+
+  const hasProfile = !!(displayLevel || displayStrengths.length > 0 || displayWeaknesses.length > 0);
+  const hasSessions = !!memory && memory.sessions.length > 0;
   const hasMemory = hasProfile || hasSessions;
 
   return (
@@ -53,25 +83,25 @@ export default async function MemoryPage() {
         ) : (
           <>
             {/* Level */}
-            {memory.levelAssessment && (
+            {displayLevel && (
               <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
                 <HugeiconsIcon icon={Medal01Icon} size={16} className="text-primary shrink-0" />
                 <span className="text-sm text-muted-foreground">Level</span>
-                <span className="text-sm font-medium ml-auto">{memory.levelAssessment}</span>
+                <span className="text-sm font-medium ml-auto">{displayLevel}</span>
               </div>
             )}
 
             {/* Strengths & Weaknesses */}
-            {(memory.strengths.length > 0 || memory.weaknesses.length > 0) && (
+            {(displayStrengths.length > 0 || displayWeaknesses.length > 0) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="rounded-xl border bg-card p-4 space-y-2.5">
                   <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                     <HugeiconsIcon icon={CheckmarkCircle01Icon} size={13} className="text-green-500" />
                     Strengths
                   </div>
-                  {memory.strengths.length > 0 ? (
+                  {displayStrengths.length > 0 ? (
                     <ul className="space-y-1.5">
-                      {memory.strengths.map((s, i) => (
+                      {displayStrengths.map((s, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
                           <span className="mt-1.5 size-1.5 rounded-full bg-green-500 shrink-0" />
                           {s}
@@ -88,9 +118,9 @@ export default async function MemoryPage() {
                     <HugeiconsIcon icon={AlertCircleIcon} size={13} className="text-primary" />
                     To work on
                   </div>
-                  {memory.weaknesses.length > 0 ? (
+                  {displayWeaknesses.length > 0 ? (
                     <ul className="space-y-1.5">
-                      {memory.weaknesses.map((w, i) => (
+                      {displayWeaknesses.map((w, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
                           <span className="mt-1.5 size-1.5 rounded-full bg-primary shrink-0" />
                           {w}

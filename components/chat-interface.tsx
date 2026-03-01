@@ -59,6 +59,16 @@ function extractAssistantText(message: UIMessage): string {
     .trim();
 }
 
+function canonicalizeSpeechText(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // ─── sessionStorage helpers ───────────────────────────────────────────────────
 
 type CardsCache = {
@@ -95,8 +105,18 @@ export function ChatView({ conversationId, initialMessages, userProfile }: Props
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const initialLastAssistantId = [...initialMessages].reverse().find((m) => m.role === "assistant")?.id ?? null;
-  const lastSpokenMessageIdRef = useRef<string | null>(initialLastAssistantId);
+  const initialLastAssistant = [...initialMessages].reverse().find((m) => m.role === "assistant") ?? null;
+  const initialLastAssistantText = initialLastAssistant ? extractAssistantText(initialLastAssistant) : "";
+  const initialLastAssistantSignature = initialLastAssistant
+    ? `${initialLastAssistant.id}:${canonicalizeSpeechText(initialLastAssistantText)}`
+    : null;
+  const lastSpokenSignatureRef = useRef<string | null>(initialLastAssistantSignature);
+  const lastSpokenTextByMessageIdRef = useRef<Map<string, string>>(
+    initialLastAssistant ? new Map([[initialLastAssistant.id, initialLastAssistantText]]) : new Map(),
+  );
+  const inFlightSignatureRef = useRef<string | null>(null);
+  const inFlightCanonicalRef = useRef<string | null>(null);
+  const recentlySpokenTextRef = useRef<{ canonical: string; at: number } | null>(null);
   const onTtsDoneRef = useRef<(() => void) | null>(null);
 
   // Restore TTS preference after mount
@@ -136,8 +156,8 @@ export function ChatView({ conversationId, initialMessages, userProfile }: Props
     setIsSpeaking(false);
   }, []);
 
-  const speakText = useCallback(async (text: string) => {
-    if (!text) return;
+  const speakText = useCallback(async (text: string): Promise<boolean> => {
+    if (!text) return false;
 
     // Stop any currently playing audio
     stopSpeaking();
@@ -153,7 +173,7 @@ export function ChatView({ conversationId, initialMessages, userProfile }: Props
 
       if (!response.ok) {
         setIsSpeaking(false);
-        return;
+        return false;
       }
 
       const blob = await response.blob();
@@ -176,29 +196,68 @@ export function ChatView({ conversationId, initialMessages, userProfile }: Props
       };
 
       await audio.play();
+      return true;
     } catch {
       setIsSpeaking(false);
       onTtsDoneRef.current?.();
+      return false;
     }
-  }, [stopSpeaking]);
+  }, [stopSpeaking, userProfile.voiceGender]);
 
-  // Watch for new completed assistant messages and auto-play TTS
+  // Watch for new assistant messages and auto-play TTS.
+  // Special case: allow the final closing line to be spoken while end_session is still saving.
   useEffect(() => {
     if (!ttsEnabled) return;
-    if (isThinking) return; // wait until streaming is done
 
     // Find the last assistant message
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     if (!lastAssistant) return;
 
-    // Don't re-speak a message we already spoke
-    if (lastSpokenMessageIdRef.current === lastAssistant.id) return;
+    const hasPendingEndSessionSave = lastAssistant.parts.some(
+      (part) =>
+        part.type === "tool-end_session" &&
+        (part as { state?: string }).state !== "output-available",
+    );
 
-    const text = extractAssistantText(lastAssistant);
+    // Normally wait for completion; except for end-session closing line.
+    if (isThinking && !hasPendingEndSessionSave) return;
+
+    const fullText = extractAssistantText(lastAssistant);
+    if (!fullText) return;
+
+    const previousTextForMessage = lastSpokenTextByMessageIdRef.current.get(lastAssistant.id) ?? "";
+    const text =
+      previousTextForMessage && fullText.startsWith(previousTextForMessage)
+        ? fullText.slice(previousTextForMessage.length).trim()
+        : fullText;
     if (!text) return;
 
-    lastSpokenMessageIdRef.current = lastAssistant.id;
-    void speakText(text);
+    const canonical = canonicalizeSpeechText(text);
+    const signature = `${lastAssistant.id}:${canonical}`;
+
+    // Don't re-speak a message we already spoke or are currently speaking.
+    if (lastSpokenSignatureRef.current === signature) return;
+    if (inFlightSignatureRef.current === signature) return;
+    if (inFlightCanonicalRef.current === canonical) return;
+
+    // Guard against recap-related duplicate text in a follow-up assistant message.
+    const recent = recentlySpokenTextRef.current;
+    if (recent && Date.now() - recent.at < 20000 && recent.canonical === canonical) return;
+
+    inFlightSignatureRef.current = signature;
+    inFlightCanonicalRef.current = canonical;
+
+    // Mark as spoken only after playback starts successfully.
+    void (async () => {
+      const started = await speakText(text);
+      if (started) {
+        lastSpokenSignatureRef.current = signature;
+        lastSpokenTextByMessageIdRef.current.set(lastAssistant.id, fullText);
+        recentlySpokenTextRef.current = { canonical, at: Date.now() };
+      }
+      if (inFlightSignatureRef.current === signature) inFlightSignatureRef.current = null;
+      if (inFlightCanonicalRef.current === canonical) inFlightCanonicalRef.current = null;
+    })();
   }, [messages, isThinking, ttsEnabled, speakText]);
 
   // Stop speaking when user sends a new message

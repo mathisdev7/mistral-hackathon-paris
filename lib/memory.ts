@@ -131,13 +131,18 @@ export async function lookupSessions(
 // ─── Write ────────────────────────────────────────────────────────────────────
 
 /**
- * Merge new session assessment into the learner's core profile.
+ * Update learner core profile.
  * - levelAssessment: always replaced with the latest
- * - strengths / weaknesses: merged with existing, deduped, capped at 10 each
+ * - strengths / weaknesses: can merge or fully replace based on replaceLists
  */
 export async function saveUserProfile(
   userId: string,
-  data: { levelAssessment?: string | null; strengths?: string[]; weaknesses?: string[] },
+  data: {
+    levelAssessment?: string | null;
+    strengths?: string[];
+    weaknesses?: string[];
+    replaceLists?: boolean;
+  },
 ): Promise<void> {
   const client = getClient();
   if (!client) return;
@@ -148,15 +153,43 @@ export async function saveUserProfile(
     ? parseProfileContent(existing)
     : { levelAssessment: null, strengths: [], weaknesses: [] };
 
-  const dedup = (a: string[], b: string[]) => {
-    const seen = new Set(a.map((s) => s.toLowerCase()));
-    return [...a, ...b.filter((s) => !seen.has(s.toLowerCase()))];
+  const normalize = (s: string) => s.trim().replace(/\s+/g, " ");
+
+  // Favor recent sessions by prepending current-session items first, then older memory.
+  // Also drop contradictions (same item appearing in both strengths and weaknesses).
+  const mergeRecentFirst = (current: string[], previous: string[]) => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    for (const raw of [...current, ...previous]) {
+      const value = normalize(raw);
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(value);
+    }
+
+    return out;
   };
+
+  const currentStrengths = (data.strengths ?? []).map(normalize).filter(Boolean);
+  const currentWeaknesses = (data.weaknesses ?? []).map(normalize).filter(Boolean);
+
+  const mergedStrengths = data.replaceLists
+    ? mergeRecentFirst(currentStrengths, [])
+    : mergeRecentFirst(currentStrengths, prev.strengths);
+  const mergedWeaknesses = data.replaceLists
+    ? mergeRecentFirst(currentWeaknesses, [])
+    : mergeRecentFirst(currentWeaknesses, prev.weaknesses);
+
+  const weaknessSet = new Set(mergedWeaknesses.map((s) => s.toLowerCase()));
+  const strengthSet = new Set(mergedStrengths.map((s) => s.toLowerCase()));
 
   const merged = {
     levelAssessment: data.levelAssessment ?? prev.levelAssessment,
-    strengths: dedup(data.strengths ?? [], prev.strengths).slice(0, 10),
-    weaknesses: dedup(data.weaknesses ?? [], prev.weaknesses).slice(0, 10),
+    strengths: mergedStrengths.filter((s) => !weaknessSet.has(s.toLowerCase())).slice(0, 12),
+    weaknesses: mergedWeaknesses.filter((s) => !strengthSet.has(s.toLowerCase())).slice(0, 12),
   };
 
   const content = serializeProfileContent(merged);

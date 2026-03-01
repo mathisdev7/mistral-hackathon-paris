@@ -2,7 +2,10 @@ import { elevenlabs } from "@ai-sdk/elevenlabs";
 import { experimental_generateSpeech as generateSpeech } from "ai";
 
 export async function POST(req: Request) {
-  const { text } = await req.json();
+  const { text, voiceGender } = (await req.json()) as {
+    text?: unknown;
+    voiceGender?: "female" | "male";
+  };
 
   if (!text || typeof text !== "string") {
     return Response.json({ error: "No text provided" }, { status: 400 });
@@ -16,10 +19,14 @@ export async function POST(req: Request) {
   }
 
   try {
+    const selectedVoice =
+      voiceGender === "male" ? "93nuHbke4dTER9x2pDwE" : "21m00Tcm4TlvDq8ikWAM";
+
     const result = await generateSpeech({
+      speed: 1.2,
       model: elevenlabs.speech("eleven_flash_v2_5"),
       text,
-      voice: "21m00Tcm4TlvDq8ikWAM",
+      voice: selectedVoice,
     });
 
     const audioData = result.audio.uint8Array;

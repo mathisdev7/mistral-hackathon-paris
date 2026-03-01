@@ -139,10 +139,13 @@ export function ChatBottomBar({
     if (!recorder || !autoActiveRef.current) return;
 
     const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+    // Force flush buffered audio before stopping (helps auto mode on some browsers).
+    try { recorder.requestData(); } catch { /* ignore */ }
     recorder.stop();
     await stopped;
 
-    const blob = new Blob(autoChunksRef.current, { type: "audio/webm" });
+    const blobType = autoChunksRef.current[0]?.type || "audio/webm";
+    const blob = new Blob(autoChunksRef.current, { type: blobType });
     autoChunksRef.current = [];
     autoRecorderRef.current = null;
 
@@ -211,7 +214,8 @@ export function ChatBottomBar({
 
       const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => { if (e.data.size > 0) autoChunksRef.current.push(e.data); };
-      recorder.start();
+      // Timeslice improves chunk delivery reliability across browsers.
+      recorder.start(250);
       autoRecorderRef.current = recorder;
       autoChunksRef.current = [];
       speechDetectedRef.current = false;
@@ -261,7 +265,8 @@ export function ChatBottomBar({
 
       const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => { if (e.data.size > 0) toggleChunksRef.current.push(e.data); };
-      recorder.start();
+      // Timeslice improves chunk delivery reliability across browsers.
+      recorder.start(250);
       toggleRecorderRef.current = recorder;
       setIsRecording(true);
     } catch {
@@ -280,13 +285,17 @@ export function ChatBottomBar({
     setIsRecording(false);
     await stopped;
 
-    const blob = new Blob(toggleChunksRef.current, { type: "audio/webm" });
+    const blobType = toggleChunksRef.current[0]?.type || "audio/webm";
+    const blob = new Blob(toggleChunksRef.current, { type: blobType });
     toggleChunksRef.current = [];
     toggleStreamRef.current?.getTracks().forEach((t) => t.stop());
     toggleStreamRef.current = null;
     toggleRecorderRef.current = null;
 
-    if (blob.size === 0) return;
+    if (blob.size === 0) {
+      setRecordingError("No audio captured. Please try again and speak a bit longer.");
+      return;
+    }
 
     setIsTranscribing(true);
     setRecordingError(null);
@@ -302,8 +311,8 @@ export function ChatBottomBar({
       const data = (await response.json()) as { text?: string };
       const transcribed = (data.text ?? "").trim();
       if (transcribed) {
-        setText((prev) => (prev.trim() ? `${prev.trim()} ${transcribed}` : transcribed));
-        inputRef.current?.focus();
+        // Toggle mode should behave like voice mode: send immediately.
+        await onSendTextAction(transcribed);
       }
     } catch {
       setRecordingError("Could not transcribe audio. Please try again.");
