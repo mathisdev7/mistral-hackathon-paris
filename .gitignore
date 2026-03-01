@@ -1,0 +1,8 @@
+.env.local
+.env
+.env.prod
+node_modules/
+.next/
+_bmad/
+_bmad-output/
+.arctic/

@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "tutor_language_mode" text DEFAULT 'native';
