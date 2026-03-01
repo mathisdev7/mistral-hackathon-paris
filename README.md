@@ -96,8 +96,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ### Session Flow
 
 1. **New Conversation**: User starts a chat → AI greets them with memory of past sessions
-2. **Topic Selection**: AI suggests 2 practice scenarios as clickable cards
-3. **Session Start**: User accepts → AI calls `start_session` tool → enters roleplay
+2. **Topic Selection**: AI suggests 2 practice scenarios as clickable cards (or you can propose your own scenario directly in the conversation)
+3. **Session Start**: User accepts or proposes a custom scenario → AI calls `start_session` tool → enters roleplay
 4. **Roleplay**: AI stays in character, speaks in target language, user practices speaking
 5. **Session End**: User says "stop" or scenario ends → AI calls `end_session` tool
 6. **Recap**: AI generates assessment (level, strengths, weaknesses) → saves to memory
