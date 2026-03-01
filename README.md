@@ -36,7 +36,7 @@ A voice-first AI language tutor built with Next.js, Mistral AI, and ElevenLabs. 
 ### 1. Clone and Install
 
 ```bash
-git clone <your-repo-url>
+git clone git@github.com:mathisdev7/mistral-hackathon-paris.git
 cd mistral-hackathon
 bun install  # or npm install
 ```
