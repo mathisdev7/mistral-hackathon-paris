@@ -19,7 +19,7 @@ A voice-first AI language tutor built with Next.js, Mistral AI, and ElevenLabs. 
 - **Database**: PostgreSQL + Drizzle ORM
 - **Auth**: Better Auth with GitHub OAuth
 - **Memory**: Supermemory API
-- **Styling**: Tailwind CSS + shadcn/ui
+- **Styling**: Tailwind CSS + COSS UI
 
 ## Prerequisites
 
