@@ -16,7 +16,6 @@
     "@hugeicons/core-free-icons": "^3.3.0",
     "@hugeicons/react": "^1.1.5",
     "@mistralai/mistralai": "^1.14.1",
-    "@openrouter/ai-sdk-provider": "^2.2.3",
     "@supermemory/tools": "^1.4.0",
     "ai": "^6.0.105",
     "better-auth": "^1.4.20",
@@ -37,8 +36,7 @@
     "react-dom": "19.2.3",
     "supermemory": "^4.15.0",
     "tailwind-merge": "^3.5.0",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.11"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

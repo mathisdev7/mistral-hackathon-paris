@@ -67,9 +67,11 @@ BETTER_AUTH_SECRET=your_random_32_char_secret
 # Your app URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
+# GitHub OAuth credentials
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
 
+# Supermemory for long-term user memory
 SUPERMEMORY_API_KEY=your_supermemory_api_key
 ```
 
@@ -104,11 +106,11 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 The AI has 3 tools available via `streamText`:
 
-| Tool | Purpose | When Called |
-|------|---------|-------------|
-| `get_sessions` | Lookup past practice history | User asks "what did we practice?" |
-| `start_session` | Begin a roleplay scenario | User accepts to start practicing |
-| `end_session` | End session and save recap | User says stop or scenario ends |
+| Tool            | Purpose                      | When Called                       |
+| --------------- | ---------------------------- | --------------------------------- |
+| `get_sessions`  | Lookup past practice history | User asks "what did we practice?" |
+| `start_session` | Begin a roleplay scenario    | User accepts to start practicing  |
+| `end_session`   | End session and save recap   | User says stop or scenario ends   |
 
 ### Memory Architecture
 
@@ -124,12 +126,12 @@ Long-term (Supermemory)
 
 ## API Keys Reference
 
-| Service | Get Key At | Used For |
-|---------|-----------|----------|
-| Mistral AI | [console.mistral.ai](https://console.mistral.ai/) | Chat LLM + Voxtral STT |
-| ElevenLabs | [elevenlabs.io](https://elevenlabs.io/) | Text-to-speech |
-| Supermemory | [supermemory.ai](https://supermemory.ai/) | Long-term user memory |
-| GitHub OAuth | [github.com/settings/developers](https://github.com/settings/developers) | User authentication |
+| Service      | Get Key At                                                               | Used For               |
+| ------------ | ------------------------------------------------------------------------ | ---------------------- |
+| Mistral AI   | [console.mistral.ai](https://console.mistral.ai/)                        | Chat LLM + Voxtral STT |
+| ElevenLabs   | [elevenlabs.io](https://elevenlabs.io/)                                  | Text-to-speech         |
+| Supermemory  | [supermemory.ai](https://supermemory.ai/)                                | Long-term user memory  |
+| GitHub OAuth | [github.com/settings/developers](https://github.com/settings/developers) | User authentication    |
 
 ## License
 
